@@ -3,20 +3,548 @@ info:
   title: TurbineOps Lite REST API
   version: 0.1.0
 servers:
-  - url: http://localhost:4000/api
+  - url: http://localhost:4000/api/v1
+tags:
+  - name: Health
+  - name: Auth
+  - name: Turbines
+  - name: Inspections
+  - name: Findings
+  - name: Repair Plans
+  - name: Events
+
 paths:
   /healthz:
+    servers:
+      - url: http://localhost:4000/api
     get:
+      tags: [Health]
       summary: Health check
+      description: Public. Served at `/api/healthz` (not under `/v1`).
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in and receive a JWT
+      description: Token expires in 1 hour.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: eng@example.com
+              password: engineer123
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the current user
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /turbines:
     get:
+      tags: [Turbines]
       summary: List turbines
+      description: Returns up to 50 turbines. All roles.
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Turbine'
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
+      tags: [Turbines]
       summary: Create turbine
+      description: Roles ADMIN, ENGINEER.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TurbineInput'
+            example:
+              name: T-2000
+              manufacturer: SkyGen
+              mwRating: 3.2
+              lat: 12.98
+              lng: 77.59
       responses:
-        '201': { description: Created }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Turbine'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /inspections:
+    get:
+      tags: [Inspections]
+      summary: List inspections (with filters)
+      description: Newest first. All roles. Includes turbine and repair plan.
+      parameters:
+        - name: from
+          in: query
+          description: Start date, inclusive (YYYY-MM-DD)
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: End date, inclusive (YYYY-MM-DD)
+          schema: { type: string, format: date }
+        - name: turbineId
+          in: query
+          schema: { type: string }
+        - name: dataSource
+          in: query
+          schema: { $ref: '#/components/schemas/DataSource' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InspectionSummary'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Inspections]
+      summary: Create inspection
+      description: Roles ADMIN, ENGINEER. Returns 409 if the turbine already has an inspection on that date.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspectionInput'
+            example:
+              turbineId: seed-turbine
+              date: '2026-10-01'
+              dataSource: DRONE
+              inspectorName: Asha
+              rawPackageUrl: https://example.com/packages/abc.zip
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inspection'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /inspections/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Inspections]
+      summary: Get inspection with turbine, findings and repair plan
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InspectionDetail'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Inspections]
+      summary: Update inspection
+      description: |
+        Roles ADMIN, ENGINEER. Only the fields sent are changed.
+        Inspection details stay editable while a plan exists; only findings are locked.
+        Returns 409 if the new date collides with another inspection of the same turbine.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InspectionUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Inspection'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /inspections/{id}/findings:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Findings]
+      summary: Add a finding to an inspection
+      description: |
+        Roles ADMIN, ENGINEER. Applies the crack rule (BLADE_DAMAGE + "crack" in notes raises severity to at least 4).
+        Returns 409 if the inspection is locked by a repair plan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FindingInput'
+            example:
+              category: BLADE_DAMAGE
+              severity: 2
+              estimatedCost: 5000
+              notes: Crack near tip
+      responses:
+        '201':
+          description: Created. Severity in the response is the stored (possibly raised) value.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /inspections/{id}/repair-plan:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Repair Plans]
+      summary: Generate repair plan (locks the inspection)
+      description: |
+        Roles ADMIN, ENGINEER. Computes priority, total cost and max severity from the findings,
+        stores a snapshot, locks the inspection and publishes a `plan` SSE event.
+        An inspection with no findings gets priority LOW and cost 0.
+        Returns 409 if a plan already exists.
+      responses:
+        '201':
+          description: Plan generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairPlan'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Repair Plans]
+      summary: Delete repair plan (unlocks the inspection)
+      description: Roles ADMIN, ENGINEER. Publishes a `plan` SSE event with status `deleted`.
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+
+  /findings/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [Findings]
+      summary: Update a finding
+      description: |
+        Roles ADMIN, ENGINEER. Only the fields sent are changed. The crack rule is re-applied
+        (severity can be raised, never lowered). Returns 409 if the inspection is locked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FindingUpdate'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Finding'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /events:
+    servers:
+      - url: http://localhost:4000
+    get:
+      tags: [Events]
+      summary: Server-Sent Events stream
+      description: |
+        Served at `/events` (not under `/v1`). Requires the `Authorization` header, so browsers must use a
+        fetch-based SSE client rather than `EventSource`. Swagger UI cannot display a live stream.
+
+        Events:
+        - `ping`: sent once on connect, data `ok`.
+        - `plan`: sent when a plan is generated or deleted. Data is JSON:
+          `{ "inspectionId": "...", "status": "generated" | "deleted", "at": "<ISO timestamp>" }`.
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: plan
+                data: {"inspectionId":"abc123","status":"generated","at":"2026-10-01T10:00:00.000Z"}
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: severity must be an integer between 1 and 5 }
+    Unauthorized:
+      description: Missing, invalid or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Authentication required }
+    Forbidden:
+      description: Role not allowed to perform this action
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: You do not have permission to perform this action }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: Inspection not found }
+    Conflict:
+      description: Overlapping inspection, locked inspection, or plan already exists
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: An inspection already exists for this turbine on this date }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    Role:
+      type: string
+      enum: [ADMIN, ENGINEER, VIEWER]
+
+    DataSource:
+      type: string
+      enum: [DRONE, MANUAL]
+
+    FindingCategory:
+      type: string
+      enum: [BLADE_DAMAGE, LIGHTNING, EROSION, UNKNOWN]
+
+    Priority:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string, description: JWT, expires in 1 hour }
+        expiresIn: { type: integer, example: 3600, description: Seconds }
+        user: { $ref: '#/components/schemas/User' }
+
+    TurbineInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        manufacturer: { type: string }
+        mwRating: { type: number }
+        lat: { type: number }
+        lng: { type: number }
+
+    Turbine:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        manufacturer: { type: string, nullable: true }
+        mwRating: { type: number, nullable: true }
+        lat: { type: number, nullable: true }
+        lng: { type: number, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    InspectionInput:
+      type: object
+      required: [turbineId, date, dataSource]
+      properties:
+        turbineId: { type: string }
+        date: { type: string, format: date, example: '2026-10-01' }
+        dataSource: { $ref: '#/components/schemas/DataSource' }
+        inspectorName: { type: string }
+        rawPackageUrl: { type: string, description: Plain string, no upload }
+
+    InspectionUpdate:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        dataSource: { $ref: '#/components/schemas/DataSource' }
+        inspectorName: { type: string }
+        rawPackageUrl: { type: string }
+
+    Inspection:
+      type: object
+      properties:
+        id: { type: string }
+        turbineId: { type: string }
+        date: { type: string, format: date-time, description: Stored as a date; serialized as midnight UTC }
+        inspectorName: { type: string, nullable: true }
+        dataSource: { $ref: '#/components/schemas/DataSource' }
+        rawPackageUrl: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    InspectionSummary:
+      allOf:
+        - $ref: '#/components/schemas/Inspection'
+        - type: object
+          properties:
+            turbine: { $ref: '#/components/schemas/Turbine' }
+            repairPlan:
+              allOf:
+                - $ref: '#/components/schemas/RepairPlan'
+              nullable: true
+
+    InspectionDetail:
+      allOf:
+        - $ref: '#/components/schemas/InspectionSummary'
+        - type: object
+          properties:
+            findings:
+              type: array
+              items: { $ref: '#/components/schemas/Finding' }
+
+    FindingInput:
+      type: object
+      required: [category, severity, estimatedCost]
+      properties:
+        category: { $ref: '#/components/schemas/FindingCategory' }
+        severity: { type: integer, minimum: 1, maximum: 5, description: '1 Cosmetic, 2 Minor, 3 Moderate, 4 Major, 5 Critical' }
+        estimatedCost: { type: number, minimum: 0 }
+        notes: { type: string, nullable: true }
+
+    FindingUpdate:
+      type: object
+      properties:
+        category: { $ref: '#/components/schemas/FindingCategory' }
+        severity: { type: integer, minimum: 1, maximum: 5 }
+        estimatedCost: { type: number, minimum: 0 }
+        notes: { type: string, nullable: true }
+
+    Finding:
+      type: object
+      properties:
+        id: { type: string }
+        inspectionId: { type: string }
+        category: { $ref: '#/components/schemas/FindingCategory' }
+        severity: { type: integer, minimum: 1, maximum: 5 }
+        estimatedCost: { type: number }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    RepairPlan:
+      type: object
+      properties:
+        id: { type: string }
+        inspectionId: { type: string }
+        priority: { $ref: '#/components/schemas/Priority' }
+        totalEstimatedCost: { type: number }
+        maxSeverity: { type: integer }
+        findingCount: { type: integer }
+        snapshotJson:
+          type: array
+          description: Frozen copy of the findings at generation time
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              category: { $ref: '#/components/schemas/FindingCategory' }
+              severity: { type: integer }
+              estimatedCost: { type: number }
+              notes: { type: string, nullable: true }
+        generatedBy: { type: string, nullable: true, description: User id }
+        createdAt: { type: string, format: date-time }
+
+security:
+  - bearerAuth: []

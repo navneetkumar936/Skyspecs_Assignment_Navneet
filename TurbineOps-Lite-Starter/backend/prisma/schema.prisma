@@ -35,7 +35,7 @@ model Turbine {
 
 model Inspection {
   id            String   @id @default(cuid())
-  date          DateTime
+  date          DateTime @db.Date
   inspectorName String?
   dataSource    DataSource
   rawPackageUrl String?
@@ -45,7 +45,9 @@ model Inspection {
   repairPlan    RepairPlan?
   createdAt     DateTime @default(now())
 
-  @@index([turbineId, date])
+  @@unique([turbineId, date])
+  @@index([date])
+  @@index([dataSource])
 }
 
 enum DataSource {
@@ -79,6 +81,8 @@ model RepairPlan {
   inspectionId       String   @unique
   priority           Priority
   totalEstimatedCost Float
+  maxSeverity        Int
+  findingCount       Int
   snapshotJson       Json
   createdAt          DateTime @default(now())
 }
