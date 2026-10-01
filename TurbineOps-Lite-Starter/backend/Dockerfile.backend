@@ -1,9 +1,16 @@
 FROM node:20-alpine
+# Prisma's engine needs openssl
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
+
 COPY package*.json ./
-RUN npm install
+RUN npm ci
+
+COPY prisma ./prisma
+RUN npm prisma generate
+
 COPY . .
-RUN npm run build && npx prisma generate
-ENV NODE_ENV=production
 EXPOSE 4000
-CMD ["sh", "-c", "npm run prisma:deploy && node dist/index.js"]
+
+# apply migrations, seed (idempotent), then start
+CMD ["sh", "-c", "npm prisma migrate deploy && npm run seed && npm tsx src/index.ts"]
