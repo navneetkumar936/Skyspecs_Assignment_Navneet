@@ -87,7 +87,7 @@ paths:
     post:
       tags: [Turbines]
       summary: Create turbine
-      description: Roles ADMIN, ENGINEER.
+      description: Roles ADMIN.
       requestBody:
         required: true
         content:

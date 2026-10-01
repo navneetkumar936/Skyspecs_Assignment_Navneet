@@ -10,5 +10,6 @@ findingRoutes.patch('/:id', canWrite, asyncHandler(async (req, res) => {
 }));
 
 findingRoutes.get('/', asyncHandler(async (req, res) => {
-  res.json(await searchFindings(req.query.q));
+  const inspectionId = typeof req.query.inspectionId === 'string' ? req.query.inspectionId : undefined;
+  res.json(await searchFindings(req.query.q, inspectionId));
 }));

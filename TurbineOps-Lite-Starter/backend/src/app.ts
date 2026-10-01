@@ -24,10 +24,10 @@ export async function createApp() {
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiDoc));
 
   app.use('/api/v1/auth', authRoutes);
-  app.use('/api/turbines', authenticate, turbineRoutes);
-  app.use('/api/events', authenticate, eventsRoutes);
-  app.use('/api/inspections', authenticate, inspectionRoutes);
-  app.use('/api/findings', authenticate, findingRoutes);
+  app.use('/api/v1/turbines', authenticate, turbineRoutes);
+  app.use('/events', authenticate, eventsRoutes);
+  app.use('/api/v1/inspections', authenticate, inspectionRoutes);
+  app.use('/api/v1/findings', authenticate, findingRoutes);
 
   await mountGraphql(app);
 

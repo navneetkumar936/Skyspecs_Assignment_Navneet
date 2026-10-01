@@ -80,11 +80,11 @@ export async function updateFinding(id: string, input: FindingInput) {
   return updated;
 }
 
-export async function searchFindings(q: unknown) {
+export async function searchFindings(q: unknown, inspectionId?: string) {
   const term = typeof q === 'string' ? q.trim() : '';
   if (!term) throw new AppError(400, 'q is required');
   return prisma.finding.findMany({
-    where: { notes: { contains: term, mode: 'insensitive' } },
+    where: { notes: { contains: term, mode: 'insensitive' }, ...(inspectionId ? { inspectionId } : {}), },
     orderBy: { createdAt: 'desc' },
     take: 100,
     include: { inspection: { include: { turbine: true, repairPlan: true } } },

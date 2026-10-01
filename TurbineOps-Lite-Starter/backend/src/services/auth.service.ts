@@ -34,10 +34,10 @@ export function extractUser(header?: string): AuthUser {
   if (!header?.startsWith('Bearer ')) throw new AppError(401, 'Authentication required');
   try {
     const p = jwt.verify(header.slice(7), env.jwtSecret, { algorithms: ['HS256'] }) as jwt.JwtPayload;
-    if (!p.subject || !Object.values(Role).includes(p.role)) throw new Error('bad payload');
-    return { id: p.subject, role: p.role as Role };
+    if (!p.sub || !Object.values(Role).includes(p.role)) throw new Error('bad payload');
+    return { id: p.sub, role: p.role as Role };
   } catch {
-    throw new AppError(401, 'Invalid or expired token');
+    throw new AppError(401, 'Invalid or expiredddd token');
   }
 }
 

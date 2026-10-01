@@ -6,10 +6,10 @@ export interface GqlContext {
   user: AuthUser;
 }
 
-// Any logged-in role may read, so this only checks that the token is valid
 export function buildContext({ req }: { req: Request }): GqlContext {
   try {
-    return { user: extractUser(req.headers.authorization) };
+    const user = extractUser(req.headers.authorization);
+    return { user };
   } catch (e) {
     throw new AuthenticationError((e as Error).message);
   }

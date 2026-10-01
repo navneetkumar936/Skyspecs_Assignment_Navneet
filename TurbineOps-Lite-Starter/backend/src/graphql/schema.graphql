@@ -56,39 +56,10 @@ type RepairPlan {
   createdAt: String!
 }
 
-input CreateInspectionInput {
-  turbineId: ID!
-  date: String!
-  inspectorName: String
-  dataSource: DataSource!
-  rawPackageUrl: String
-}
-
-input FindingInput {
-  category: FindingCategory!
-  severity: Int!
-  estimatedCost: Float!
-  notes: String
-}
-
-input UpdateFindingInput {
-  category: FindingCategory
-  severity: Int
-  estimatedCost: Float
-  notes: String
-}
-
 type Query {
-  inspections(turbineId: ID, from: String, to: String, dataSource: DataSource): [Inspection!]!
+  turbines: [Turbine!]!
   inspection(id: ID!): Inspection
+  inspections(turbineId: ID, from: String, to: String, dataSource: DataSource): [Inspection!]!
   repairPlan(inspectionId: ID!): RepairPlan
-  searchFindings(q: String!): [Finding!]!
-}
-
-type Mutation {
-  createInspection(input: CreateInspectionInput!): Inspection!
-  createFinding(inspectionId: ID!, input: FindingInput!): Finding!
-  updateFinding(id: ID!, input: UpdateFindingInput!): Finding!
-  deleteRepairPlan(inspectionId: ID!): Boolean!
-  generateRepairPlan(inspectionId: ID!): RepairPlan!
+  searchFindings(q: String!, inspectionId: ID): [Finding!]!
 }

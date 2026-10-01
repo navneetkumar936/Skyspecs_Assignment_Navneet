@@ -27,3 +27,5 @@ export const requireRole =
 
 // ADMIN has full access, ENGINEER creates and edits, VIEWER is read-only.
 export const canWrite = requireRole('ADMIN', 'ENGINEER');
+
+export const adminOnly = requireRole('ADMIN');
