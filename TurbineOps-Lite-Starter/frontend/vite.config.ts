@@ -7,5 +7,5 @@ const proxy = { '/api': api, '/graphql': api, '/events': api };
 export default defineConfig({
   plugins: [react()],
   server: { port: 5173, proxy: { '/api': api, '/graphql': api, '/events': api } },
-  preview: { host: true, port: 8080, proxy }
+  preview: { host: true, port: 8080, proxy, allowedHosts: true }
 });
